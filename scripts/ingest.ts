@@ -1,41 +1,76 @@
 /**
  * Weekly ingestion pipeline (PRD §6).
  *
- * This is a scaffold, not a finished pipeline — the pieces below are the
- * next real build task. Wiring it up needs:
+ * Status: fetch + parse are real and tested (see scripts/lib/ and
+ * scripts/__tests__/). Diff / publish / flag / Twitter-check are still
+ * TODO — see the end of this file.
  *
- * 1. Fetch: check nerc.gov.ng for a new Ikeja Electric / EKEDC monthly
- *    energy cap PDF since the last run (compare against meta.lastIngested
- *    in src/data/feeders.json). NERC's PDFs live under predictable-ish
- *    paths like /wp-content/uploads/<year>/<month>/<DiscoName>...pdf —
- *    worth checking whether they still publish an index page listing
- *    each month's file, since that's more reliable than guessing URLs.
- *
- * 2. Parse: extract the feeder/band table from the PDF. These are
- *    multi-page tables with merged cells (see the sample data note in
- *    feeders.json) — a library like `pdf-parse` or `pdf2json` will get
- *    the text out, but the table structure will likely need custom
- *    row-reconstruction logic. Budget real time for this step; it's the
- *    least predictable part of the whole pipeline.
- *
- * 3. Diff: compare newly parsed records against the current
- *    src/data/feeders.json, and produce a change list (added / removed /
- *    band-changed feeders).
- *
- * 4. Publish or flag: auto-write clean diffs back to feeders.json.
- *    Anything the parser couldn't confidently extract should be written
- *    to a `flagged.json` file instead, for the weekly ~15-20 min manual
- *    review (PRD §7) rather than silently dropped or guessed at.
- *
- * 5. Twitter/X check: separately poll Ikeja Electric's and EKEDC's
- *    accounts for reclassification announcements. Treat any hit as a
- *    flagged item for manual confirm — never auto-publish from a tweet.
+ * IMPORTANT before turning on the scheduled job: scripts/lib/nerc-crawl.ts
+ * was written against nerc.gov.ng's rendered text content, not its raw
+ * HTML source (this dev sandbox couldn't reach nerc.gov.ng to inspect
+ * markup directly). Run `npx tsx scripts/ingest.ts` for real once, look
+ * at what it finds, and adjust extractPdfLinks()/filterByDisco() if the
+ * live markup doesn't match.
  *
  * Run with: npx tsx scripts/ingest.ts
  */
 
+import { findFeederPdfLinks } from "./lib/nerc-crawl";
+import { parseFeederPdfText } from "./lib/parse-feeder-pdf";
+// @ts-expect-error -- pdf-parse has no bundled types
+import pdfParse from "pdf-parse";
+
+const DISCOS = ["Ikeja Electric", "EKEDC"] as const;
+
+async function ingestDisco(disco: (typeof DISCOS)[number]) {
+  console.log(`\n=== ${disco} ===`);
+
+  const links = await findFeederPdfLinks(disco, /* maxPages */ 2);
+  if (links.length === 0) {
+    console.log(`No PDFs found for ${disco}. Check nerc-crawl.ts against the live markup.`);
+    return;
+  }
+
+  // Most recent (page 1, first match) is what we care about weekly.
+  const target = links[0];
+  console.log(`Found: ${target.title}\n  ${target.url}`);
+
+  const res = await fetch(target.url);
+  if (!res.ok) {
+    console.log(`Failed to download PDF: ${res.status}`);
+    return;
+  }
+  const buffer = Buffer.from(await res.arrayBuffer());
+
+  const { text } = await pdfParse(buffer);
+  const { records, unparsedLines } = parseFeederPdfText(text, disco);
+
+  console.log(`Parsed ${records.length} feeder records, ${unparsedLines.length} unparsed lines.`);
+  if (unparsedLines.length > 0) {
+    console.log("Unparsed (would go to flagged.json for manual review):");
+    unparsedLines.slice(0, 10).forEach((l) => console.log(`  - ${l}`));
+  }
+
+  // TODO:
+  // 1. Load current src/data/feeders.json for this disco.
+  // 2. Diff `records` against it (added / removed / band-changed).
+  // 3. Write clean diffs back to feeders.json; write unparsedLines +
+  //    ambiguous diffs to a flagged.json for the weekly manual review.
+  // 4. Update feeders.json's meta.lastIngested / sourceMonth.
+}
+
 async function main() {
-  console.log("TODO: implement steps 1–5 above.");
+  for (const disco of DISCOS) {
+    try {
+      await ingestDisco(disco);
+    } catch (err) {
+      console.error(`Error ingesting ${disco}:`, err);
+    }
+  }
+
+  console.log(
+    "\nNext: implement diff/publish/flag (see TODO in ingestDisco), then the separate X/Twitter check described in the module comment at the top of this file."
+  );
 }
 
 main();

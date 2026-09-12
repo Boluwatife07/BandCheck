@@ -4,9 +4,8 @@ Look up the official NERC supply band for a Nigerian electricity feeder, and
 see what hours/tariff that band is supposed to guarantee — so you can check
 it against what you're actually billed.
 
-See the PRD for full scope and reasoning. This repo is the v1 build:
-Ikeja Electric + EKEDC, weekly automated data checks with a light manual
-review step.
+See the PRD for full scope and reasoning. v1 scope: Ikeja Electric + EKEDC,
+weekly automated data checks with a light manual review step.
 
 ## Stack
 
@@ -27,30 +26,45 @@ Open http://localhost:3000.
 - **UI + search**: working. Search matches against feeder names in
   `src/data/feeders.json` and returns band, guaranteed hours, and
   approximate tariff.
-- **Data**: `src/data/feeders.json` currently holds **sample data only** —
-  real records pulled from NERC's January 2024 Ikeja Electric energy cap
-  PDF, used to validate the schema. This is explicitly flagged in the
-  file's `meta.note` and in the page footer. **Do not treat this as
-  current** — see next steps.
-- **EKEDC**: no data yet. The DiscoTabs UI already has a slot for it
-  (shows "coming soon" until `feeders.json` has EKEDC records).
-- **Ingestion pipeline**: scaffolded but not implemented —
-  `scripts/ingest.ts` lays out the 5 steps (fetch → parse → diff →
-  publish/flag → Twitter check) and `.github/workflows/weekly-update.yml`
-  has the cron shell ready to call it. This is the next real chunk of
-  work before this can show a live user anything trustworthy.
+- **Data**: `src/data/feeders.json` holds **sample data only** — real
+  records from NERC's January 2024 Ikeja Electric energy cap PDF, used to
+  validate the schema. Flagged in the file's `meta.note` and in the page
+  footer. **Not current** — the ingestion pipeline below replaces it.
+- **EKEDC**: no data yet. UI shows "coming soon" until it has records.
+- **Ingestion pipeline — fetch & parse are real and tested:**
+  - `scripts/lib/parse-feeder-pdf.ts` — turns a NERC PDF's extracted text
+    into feeder/band records. Tested against real PDF text, including the
+    messy line-wrapped rows and the "- Bilateral" edge case
+    (`scripts/__tests__/parse-feeder-pdf.test.ts`).
+  - `scripts/lib/nerc-crawl.ts` — finds the current month's PDF link for a
+    DisCo by crawling NERC's document archive at
+    `nerc.gov.ng/resource-category/monthly-energy-caps/` (confirmed this
+    page exists and lists the right documents — filenames aren't
+    consistent across months, so guessing URLs doesn't work). **Not yet
+    verified against the site's real HTML** — this sandbox's network
+    allowlist doesn't include nerc.gov.ng, so the crawler was written
+    against the page's rendered text content, not its markup. Run it for
+    real once and check `extractPdfLinks()` finds what you expect before
+    trusting the scheduled job.
+  - `scripts/ingest.ts` — wires fetch → parse together and prints what it
+    finds. **Diff / publish / flag / Twitter-check are still TODO** —
+    see the comments at the bottom of the file.
+  - `.github/workflows/weekly-update.yml` — cron shell ready to call
+    `ingest.ts` once the TODOs above are done.
 
 ## Next steps, in order
 
-1. Confirm whether NERC still publishes an index page for monthly PDFs
-   (or whether URLs need to be found another way each month).
-2. Implement PDF table extraction for one DisCo first (Ikeja Electric),
-   get it reliably parsing before adding EKEDC.
-3. Wire up the diff + flagged.json split described in `ingest.ts`.
-4. Only then turn on the GitHub Actions schedule for real.
+1. Run `npx tsx scripts/ingest.ts` for real (needs real internet access —
+   won't work from a sandboxed dev environment). Fix `nerc-crawl.ts`
+   against whatever the actual markup turns out to be.
+2. Get a real EKEDC monthly cap PDF and check whether
+   `parse-feeder-pdf.ts` needs adjusting for their row format — it's only
+   been tested against Ikeja Electric's.
+3. Implement the diff/publish/flag split described in `ingest.ts`.
+4. Turn on the GitHub Actions schedule.
 
 ## Notes on this build
 
 Fonts (Source Serif 4 / IBM Plex Sans / IBM Plex Mono via
 `next/font/google`) need real internet access to fetch on first build —
-this is normal and will just work on your machine or on Vercel.
+normal, will just work on your machine or on Vercel.
