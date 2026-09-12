@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #eef0f1;
+  --ink: #101820;
+  --hairline: #d3d2c7;
+  --brass: #c6a64b;
+
+  --band-a: #2f6f4e;
+  --band-b: #3b6e8f;
+  --band-c: #b98a2e;
+  --band-d: #b5622b;
+  --band-e: #a63d3d;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-hairline: var(--hairline);
+  --color-brass: var(--brass);
+  --color-band-a: var(--band-a);
+  --color-band-b: var(--band-b);
+  --color-band-c: var(--band-c);
+  --color-band-d: var(--band-d);
+  --color-band-e: var(--band-e);
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-data: var(--font-data);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), system-ui, sans-serif;
+}

@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "note": "SAMPLE DATA — NOT CURRENT. These records were pulled from NERC's January 2024 Ikeja Electric monthly energy cap PDF to validate the data shape only. Feeder bands change over time (upgrades/downgrades happen regularly), so this file must be replaced by the ingestion pipeline pulling the latest NERC PDF before anything here is shown to a real user as a live result.",
+    "source": "https://nerc.gov.ng/wp-content/uploads/2024/02/IkejaElectricityDistributionPlcMonthlyEnergyCapJanuary2024.pdf",
+    "sourceMonth": "2024-01",
+    "lastIngested": null
+  },
+  "records": [
+    { "disco": "Ikeja Electric", "businessUnit": "ABULE-EGBA", "feederName": "11-ABULE IROKOINJ-T1-ABULE IROKO", "band": "D" },
+    { "disco": "Ikeja Electric", "businessUnit": "ABULE-EGBA", "feederName": "11-ABULE IROKOINJ-T1-ALAKUKO", "band": "D" },
+    { "disco": "Ikeja Electric", "businessUnit": "ABULE-EGBA", "feederName": "11-AGEGEINJ-T1-IJU ROAD", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "ABULE-EGBA", "feederName": "11-AGEGEINJ-T1-OKO OBA", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "ABULE-EGBA", "feederName": "11-AKUTE INJ-T1-ISHASHI", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "ABULE-EGBA", "feederName": "11-AKUTE INJ-T1-OYEYEMI", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "ABULE-EGBA", "feederName": "11-BECKLEYINJ-T1-AGBE ROAD", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "ABULE-EGBA", "feederName": "11-BECKLEYINJ-T1-BECKLEY", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "ABULE-EGBA", "feederName": "11-BOLORUNPELUINJ-T3-GOVERNOR", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "ABULE-EGBA", "feederName": "11-IJAIYE OJOKOROINJ-T1-ABEOKUTA EXPRESS", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "ABULE-EGBA", "feederName": "11-IJAIYE OJOKOROINJ-T1-JANKARA", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OGBAINJ-T2-MANGORO", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OGBAINJ-T3-OBA AKRAN", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OJODUINJ-T1-ALAGBOLE", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OJODUINJ-T1-KING AVENUE", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OJODUINJ-T1-OJODU", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OJODUINJ-T2-EXPRESS", "band": "A" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OJODUINJ-T2-RIVER VALLEY", "band": "A" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OJODUINJ-T2-YAKOYO", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OKE IRAINJ-T1-NOB OLUWA", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OKE IRAINJ-T1-OKE IRA", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OKE IRAINJ-T2-ABIODUN JAGUN", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OKE IRAINJ-T2-KAYODE", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OKE IRAINJ-T2-THOMAS SALAKO", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OPE ILUINJ-T1-ABORO", "band": "C" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OPEBIINJ-T1-AGBAOKU", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OPEBIINJ-T1-OLUSOSUN", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-OPEBIINJ-T1-SALVATION", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-PTCINJ-T1-OPEBI", "band": "A" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-PTCINJ-T2-AWUSE", "band": "A" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-PTCINJ-T2-MEDICAL", "band": "B" },
+    { "disco": "Ikeja Electric", "businessUnit": "IKEJA", "feederName": "11-PTCINJ-T3-GENERAL HOSPITAL", "band": "A" }
+  ]
+}
