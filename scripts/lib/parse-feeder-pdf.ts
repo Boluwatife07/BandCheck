@@ -8,22 +8,30 @@
  * text until it sees a line ending in a band letter + a cap number, which
  * is the one part of every row that's structurally reliable.
  *
+ * Two row formats are supported, both confirmed against real September
+ * 2026 PDFs:
+ * - Ikeja Electric: "<BUSINESS UNIT> BU <FEEDER NAME> <BAND> <CAP>" —
+ *   split on the literal " BU " separator.
+ * - EKEDC: "<STATE> <UNDERTAKING> <VOLTAGE>kV-<FEEDER NAME> <BAND> <CAP>"
+ *   — no " BU " separator; feeder names instead start with a voltage
+ *   prefix like "11kV-". Split there instead.
+ *
  * Known rough edges (call these out to whoever reviews `unparsedLines`):
- * - Some months prefix rows with a STATE column (e.g. "OGUN ABULE-EGBA BU
- *   ..."). This parser keeps that prefix attached to businessUnit rather
- *   than splitting it out — fine for search/lookup, just means
- *   businessUnit isn't perfectly normalised across months.
- * - This is tuned against Ikeja Electric's row format
- *   ("<BUSINESS UNIT> BU <FEEDER NAME> <BAND> <CAP>"). EKEDC's monthly
- *   cap PDFs haven't been inspected yet — do not assume this parser
- *   works on them unmodified. Grab a real EKEDC PDF and check before
- *   wiring it in.
+ * - Some Ikeja Electric months prefix rows with a STATE column (e.g.
+ *   "OGUN ABULE-EGBA BU ..."). This parser keeps that prefix attached to
+ *   businessUnit rather than splitting it out — fine for search/lookup,
+ *   just means businessUnit isn't perfectly normalised across months.
+ *   Same applies to EKEDC's leading state name.
+ * - Only these two DisCos' formats have been seen for real. A third
+ *   DisCo added later will likely need its own split rule here.
  */
 
 import { BandLetter, FeederRecord } from "@/lib/bands";
 
 const NOISE_PATTERNS: RegExp[] = [
   /^page\s*\|/i,
+  /^p\s*a\s*g\s*e\s*\|/i, // PDF text extraction sometimes spaces out "Page | 1" as "P a g e |1"
+  /^--\s*\d+\s*of\s*\d+\s*--$/i, // "-- 2 of 2 --" style page footers
   /^order no\/nerc/i,
   /^business unit/i,
   /^state\s/i,
@@ -41,12 +49,50 @@ const NOISE_PATTERNS: RegExp[] = [
   /^\(kwh\)/i,
 ];
 
+// Ikeja Electric-style separator between business unit and feeder name.
+const BU_SEPARATOR = " BU ";
+
+// EKEDC feeder names start with a voltage prefix like "11kV-" — use the
+// last occurrence as the split point when there's no " BU " separator.
+const VOLTAGE_PREFIX = /\d+\s*k[vV]\s*-/;
+
+function splitBusinessUnitAndFeeder(
+  prefix: string
+): { businessUnit: string; feederName: string } | null {
+  const buIdx = prefix.lastIndexOf(BU_SEPARATOR);
+  if (buIdx !== -1) {
+    return {
+      businessUnit: prefix.slice(0, buIdx).trim(),
+      feederName: prefix.slice(buIdx + BU_SEPARATOR.length).trim(),
+    };
+  }
+
+  const voltageMatch = VOLTAGE_PREFIX.exec(prefix);
+  if (voltageMatch) {
+    return {
+      businessUnit: prefix.slice(0, voltageMatch.index).trim(),
+      feederName: prefix.slice(voltageMatch.index).trim(),
+    };
+  }
+
+  return null;
+}
+
 // Line (or accumulated buffer) ending in a band letter, optionally
 // "- Bilateral", then a cap figure (may contain commas).
 const RECORD_END = /(?:^|\s)([A-E])(?:\s*-\s*Bilateral)?\s+([\d,]+)\s*$/i;
 
+// Page-header artifacts pdf-parse sometimes glues onto the start of the
+// next real line rather than emitting on their own line — strip as a
+// prefix, not just matched as a whole-line noise pattern.
+const LEADING_PAGE_MARKER = /^(?:p\s*a\s*g\s*e|page)\s*\|\s*\d+\s*/i;
+
 function isNoise(line: string): boolean {
   return NOISE_PATTERNS.some((re) => re.test(line));
+}
+
+function stripLeadingPageMarker(line: string): string {
+  return line.replace(LEADING_PAGE_MARKER, "");
 }
 
 export interface ParseResult {
@@ -64,8 +110,9 @@ export function parseFeederPdfText(text: string, disco: string): ParseResult {
   const unparsedLines: string[] = [];
   let buffer = "";
 
-  for (const line of lines) {
-    if (isNoise(line)) continue;
+  for (const rawLine of lines) {
+    const line = stripLeadingPageMarker(rawLine);
+    if (!line || isNoise(line)) continue;
 
     const candidate = buffer ? `${buffer} ${line}` : line;
     const match = candidate.match(RECORD_END);
@@ -77,18 +124,12 @@ export function parseFeederPdfText(text: string, disco: string): ParseResult {
 
     const band = match[1].toUpperCase() as BandLetter;
     const prefix = candidate.slice(0, match.index).trim();
-    const buIdx = prefix.lastIndexOf(" BU ");
+    const split = splitBusinessUnitAndFeeder(prefix);
 
-    if (buIdx === -1) {
+    if (!split || !split.businessUnit || !split.feederName) {
       unparsedLines.push(candidate);
     } else {
-      const businessUnit = prefix.slice(0, buIdx).trim();
-      const feederName = prefix.slice(buIdx + 4).trim();
-      if (businessUnit && feederName) {
-        records.push({ disco, businessUnit, feederName, band });
-      } else {
-        unparsedLines.push(candidate);
-      }
+      records.push({ disco, ...split, band });
     }
     buffer = "";
   }
