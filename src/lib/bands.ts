@@ -25,12 +25,17 @@ export interface FeederRecord {
   band: BandLetter;
 }
 
+export interface DiscoSourceMeta {
+  disco: string;
+  source: string;
+  sourceMonth: string;
+  lastIngested: string;
+}
+
 export interface FeedersDataset {
   meta: {
     note: string;
-    source: string;
-    sourceMonth: string;
-    lastIngested: string | null;
+    sources: DiscoSourceMeta[];
   };
   records: FeederRecord[];
 }

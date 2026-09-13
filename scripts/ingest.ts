@@ -1,76 +1,171 @@
 /**
  * Weekly ingestion pipeline (PRD §6).
  *
- * Status: fetch + parse are real and tested (see scripts/lib/ and
- * scripts/__tests__/). Diff / publish / flag / Twitter-check are still
- * TODO — see the end of this file.
+ * Status: fetch, parse, and diff/publish/flag are real, tested, and have
+ * been run once against the live site (see the module comments in
+ * scripts/lib/*.ts for what was verified vs. still assumed). The
+ * Twitter/X reclassification check described in the PRD is the one
+ * remaining piece — not started.
  *
- * IMPORTANT before turning on the scheduled job: scripts/lib/nerc-crawl.ts
- * was written against nerc.gov.ng's rendered text content, not its raw
- * HTML source (this dev sandbox couldn't reach nerc.gov.ng to inspect
- * markup directly). Run `npx tsx scripts/ingest.ts` for real once, look
- * at what it finds, and adjust extractPdfLinks()/filterByDisco() if the
- * live markup doesn't match.
+ * What this does, per DisCo:
+ *   1. Find this month's PDF (nerc-crawl.ts) — confirmed working live.
+ *   2. Download + extract its text (pdf-parse) and parse it into
+ *      records (parse-feeder-pdf.ts) — confirmed working live for both
+ *      Ikeja Electric and EKEDC's row formats.
+ *   3. Diff against what's currently in src/data/feeders.json
+ *      (diff-feeders.ts) and split into "clean" (safe to auto-publish)
+ *      and "flagged" (needs the weekly manual review).
+ *   4. Write the updated dataset and a flagged.json report.
  *
  * Run with: npx tsx scripts/ingest.ts
  */
 
 import { findFeederPdfLinks } from "./lib/nerc-crawl";
 import { parseFeederPdfText } from "./lib/parse-feeder-pdf";
+import { diffFeeders, applyCleanDiffs, FeederDiff } from "./lib/diff-feeders";
+import { deriveSourceMonth } from "./lib/derive-source-month";
+import { loadDataset, saveDataset, saveFlagged } from "./lib/dataset-io";
 import { PDFParse } from "pdf-parse";
+import { FeederRecord, DiscoSourceMeta } from "../src/lib/bands";
 
 const DISCOS = ["Ikeja Electric", "EKEDC"] as const;
 
-async function ingestDisco(disco: (typeof DISCOS)[number]) {
+interface DiscoResult {
+  disco: string;
+  updatedRecords: FeederRecord[] | null; // null = nothing usable this run
+  sourceMeta: DiscoSourceMeta | null;
+  flaggedDiffs: FeederDiff[];
+  unparsedLines: string[];
+}
+
+async function ingestDisco(
+  disco: (typeof DISCOS)[number],
+  currentRecordsForDisco: FeederRecord[]
+): Promise<DiscoResult> {
   console.log(`\n=== ${disco} ===`);
+  const empty: DiscoResult = {
+    disco,
+    updatedRecords: null,
+    sourceMeta: null,
+    flaggedDiffs: [],
+    unparsedLines: [],
+  };
 
   const links = await findFeederPdfLinks(disco, /* maxPages */ 2);
   if (links.length === 0) {
     console.log(`No PDFs found for ${disco}. Check nerc-crawl.ts against the live markup.`);
-    return;
+    return empty;
   }
 
-  // Most recent (page 1, first match) is what we care about weekly.
-  const target = links[0];
+  const target = links[0]; // archive is reverse-chronological — first match is current
   console.log(`Found: ${target.title}\n  ${target.url}`);
 
   const res = await fetch(target.url);
   if (!res.ok) {
     console.log(`Failed to download PDF: ${res.status}`);
-    return;
+    return empty;
   }
   const buffer = Buffer.from(await res.arrayBuffer());
 
   const parser = new PDFParse({ data: buffer });
   const { text } = await parser.getText();
   await parser.destroy();
-  const { records, unparsedLines } = parseFeederPdfText(text, disco);
+  const { records: freshRecords, unparsedLines } = parseFeederPdfText(text, disco);
 
-  console.log(`Parsed ${records.length} feeder records, ${unparsedLines.length} unparsed lines.`);
-  if (unparsedLines.length > 0) {
-    console.log("Unparsed (would go to flagged.json for manual review):");
-    unparsedLines.slice(0, 10).forEach((l) => console.log(`  - ${l}`));
-  }
+  console.log(`Parsed ${freshRecords.length} feeder records, ${unparsedLines.length} unparsed lines.`);
 
-  // TODO:
-  // 1. Load current src/data/feeders.json for this disco.
-  // 2. Diff `records` against it (added / removed / band-changed).
-  // 3. Write clean diffs back to feeders.json; write unparsedLines +
-  //    ambiguous diffs to a flagged.json for the weekly manual review.
-  // 4. Update feeders.json's meta.lastIngested / sourceMonth.
+  const diff = diffFeeders(currentRecordsForDisco, freshRecords, disco);
+  console.log(
+    `Diff: ${diff.clean.length} clean (auto-publish), ${diff.flagged.length} flagged (needs review), ${diff.unchangedCount} unchanged.`
+  );
+
+  const updatedRecords = applyCleanDiffs(currentRecordsForDisco, diff.clean);
+
+  const sourceMeta: DiscoSourceMeta = {
+    disco,
+    source: target.url,
+    sourceMonth: deriveSourceMonth(target.url),
+    lastIngested: new Date().toISOString(),
+  };
+
+  return { disco, updatedRecords, sourceMeta, flaggedDiffs: diff.flagged, unparsedLines };
 }
 
 async function main() {
+  const dataset = await loadDataset();
+  const results: DiscoResult[] = [];
+
   for (const disco of DISCOS) {
+    const currentForDisco = dataset.records.filter((r) => r.disco === disco);
     try {
-      await ingestDisco(disco);
+      results.push(await ingestDisco(disco, currentForDisco));
     } catch (err) {
       console.error(`Error ingesting ${disco}:`, err);
+      results.push({
+        disco,
+        updatedRecords: null,
+        sourceMeta: null,
+        flaggedDiffs: [],
+        unparsedLines: [],
+      });
     }
   }
 
+  // Rebuild the full records list: for each DisCo, use this run's updated
+  // records if we got any, otherwise leave whatever was already there
+  // untouched (a failed fetch/parse should never wipe existing data).
+  const otherDiscoRecords = dataset.records.filter(
+    (r) => !DISCOS.includes(r.disco as (typeof DISCOS)[number])
+  );
+  const newRecords = [...otherDiscoRecords];
+  for (const disco of DISCOS) {
+    const result = results.find((r) => r.disco === disco);
+    if (result?.updatedRecords) {
+      newRecords.push(...result.updatedRecords);
+    } else {
+      newRecords.push(...dataset.records.filter((r) => r.disco === disco));
+    }
+  }
+
+  const newSources = dataset.meta.sources.filter(
+    (s) => !DISCOS.includes(s.disco as (typeof DISCOS)[number])
+  );
+  for (const result of results) {
+    if (result.sourceMeta) newSources.push(result.sourceMeta);
+    else {
+      const existing = dataset.meta.sources.find((s) => s.disco === result.disco);
+      if (existing) newSources.push(existing);
+    }
+  }
+
+  const anySampleDataLeft = newSources.length === 0;
+  await saveDataset({
+    meta: {
+      note: anySampleDataLeft
+        ? dataset.meta.note
+        : "Live data from NERC's monthly energy cap publications. See meta.sources for per-DisCo freshness.",
+      sources: newSources,
+    },
+    records: newRecords,
+  });
+
+  await saveFlagged({
+    generatedAt: new Date().toISOString(),
+    unparsedLines: results.flatMap((r) =>
+      r.unparsedLines.map((line) => ({ disco: r.disco, line }))
+    ),
+    diffs: results.flatMap((r) => r.flaggedDiffs),
+  });
+
+  const totalFlagged = results.reduce(
+    (n, r) => n + r.flaggedDiffs.length + r.unparsedLines.length,
+    0
+  );
   console.log(
-    "\nNext: implement diff/publish/flag (see TODO in ingestDisco), then the separate X/Twitter check described in the module comment at the top of this file."
+    `\nWrote src/data/feeders.json (${newRecords.length} total records) and scripts/flagged.json (${totalFlagged} items for review).`
+  );
+  console.log(
+    "Still TODO: the separate weekly X/Twitter reclassification check described in the module comment above."
   );
 }
 

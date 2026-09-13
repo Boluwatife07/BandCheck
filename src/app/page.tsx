@@ -165,12 +165,15 @@ export default function Home() {
       </section>
 
       <footer className="mt-14 border-t border-hairline pt-6 text-xs leading-relaxed text-ink/50">
-        <p>
-          Data: NERC&apos;s {meta.sourceMonth} energy cap publication for
-          Ikeja Electric — sample data for development, not yet on the weekly
-          refresh described in the project README. Tariff figures are
-          approximate; the exact rate on your bill can vary slightly by
-          DisCo.
+        <p className="mb-1">{meta.note.startsWith("SAMPLE DATA") ? meta.note.split(".")[0] + "." : meta.note}</p>
+        {meta.sources.map((s) => (
+          <p key={s.disco}>
+            {s.disco}: NERC data for {s.sourceMonth}
+            {s.lastIngested && ` — last checked ${new Date(s.lastIngested).toLocaleDateString()}`}
+          </p>
+        ))}
+        <p className="mt-1">
+          Tariff figures are approximate; the exact rate on your bill can vary slightly by DisCo.
         </p>
       </footer>
     </main>
