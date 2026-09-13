@@ -17,8 +17,7 @@
 
 import { findFeederPdfLinks } from "./lib/nerc-crawl";
 import { parseFeederPdfText } from "./lib/parse-feeder-pdf";
-// @ts-expect-error -- pdf-parse has no bundled types
-import pdfParse from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 
 const DISCOS = ["Ikeja Electric", "EKEDC"] as const;
 
@@ -42,7 +41,9 @@ async function ingestDisco(disco: (typeof DISCOS)[number]) {
   }
   const buffer = Buffer.from(await res.arrayBuffer());
 
-  const { text } = await pdfParse(buffer);
+  const parser = new PDFParse({ data: buffer });
+  const { text } = await parser.getText();
+  await parser.destroy();
   const { records, unparsedLines } = parseFeederPdfText(text, disco);
 
   console.log(`Parsed ${records.length} feeder records, ${unparsedLines.length} unparsed lines.`);
